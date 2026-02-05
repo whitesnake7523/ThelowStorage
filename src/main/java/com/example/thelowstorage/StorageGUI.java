@@ -45,12 +45,44 @@ public class StorageGUI extends GuiScreen {
     private String hoveredStorageName = null;
     private int lastDragSlotId = -1; // ドラッグ操作で最後にアイテムを置いたスロットID
 
+    // クラスのフィールドに追加 (送信間隔制限用)
+    private long lastPacketTime = 0L;
+
     @Override
     public void initGui() {
         super.initGui();
         // Configから保存されている値を読み込んで同期する
         currentColumns = ConfigHandler.currentColumns;
         isOverlayEnabled = ConfigHandler.isOverlayEnabled;
+    }
+
+    private void sendClickPacket(int windowId, int slotId, int mouseButton, int mode, net.minecraft.entity.player.EntityPlayer player) {
+        long currentTime = System.currentTimeMillis();
+
+        if (currentTime - this.lastPacketTime < 10L) {
+//            player.addChatMessage(new net.minecraft.util.ChatComponentText("§c[Alert] Packet Throttled (Too Fast!)"));
+            return;
+        }
+        this.lastPacketTime = currentTime;
+
+        // --- デバッグログ: パケット内容の表示 ---
+        // モードを人間に読みやすい文字に変換
+//        String modeName = "UNKNOWN";
+//        switch (mode) {
+//            case 0: modeName = "PICKUP/PLACE"; break;
+//            case 1: modeName = "QUICK_MOVE (Shift)"; break;
+//            case 2: modeName = "SWAP (NumKey)"; break;
+//            case 3: modeName = "CLONE"; break;
+//            case 4: modeName = "DROP"; break;
+//            case 5: modeName = "DRAG"; break;
+//            case 6: modeName = "DOUBLE_CLICK"; break;
+//        }
+//
+//        String msg = String.format("§b[Packet] Win:%d Slot:%d Btn:%d Mode:%d(%s)", windowId, slotId, mouseButton, mode, modeName);
+//        player.addChatMessage(new net.minecraft.util.ChatComponentText(msg));
+
+        // --- 実際のパケット送信 ---
+        this.mc.playerController.windowClick(windowId, slotId, mouseButton, mode, player);
     }
 
     // --- 新規追加: インベントリ用の固定スケール計算 ---
@@ -586,7 +618,8 @@ public class StorageGUI extends GuiScreen {
                 this.lastClickTime = currentTime;
                 this.lastClickButton = mouseButton;
 
-                this.mc.playerController.windowClick(parent.inventorySlots.windowId, slotIdx, mouseButton, mode, this.mc.thePlayer);
+//                this.mc.playerController.windowClick(parent.inventorySlots.windowId, slotIdx, mouseButton, mode, this.mc.thePlayer);
+                this.sendClickPacket(parent.inventorySlots.windowId, slotIdx, mouseButton, mode, this.mc.thePlayer);
                 ThelowStorageMod.storageHandler.triggerCacheUpdate();
             }
         } else if (parent != null) {
@@ -813,12 +846,14 @@ public class StorageGUI extends GuiScreen {
                         int targetSlotIndex = chestSize + i;
 
                         if (isNumKey) {
-                            this.mc.playerController.windowClick(windowId, targetSlotIndex, hotbarSlot, 2, this.mc.thePlayer);
+//                            this.mc.playerController.windowClick(windowId, targetSlotIndex, hotbarSlot, 2, this.mc.thePlayer);
+                            this.sendClickPacket(windowId, targetSlotIndex, hotbarSlot, 2, this.mc.thePlayer);
                             return true;
                         } else if (isDropKey) {
                             // ★インライン化: 外部メソッドへの依存を削除して安全性を確保
                             int button = GuiScreen.isCtrlKeyDown() ? 1 : 0;
-                            this.mc.playerController.windowClick(windowId, targetSlotIndex, button, 4, this.mc.thePlayer);
+                            //this.mc.playerController.windowClick(windowId, targetSlotIndex, button, 4, this.mc.thePlayer);
+                            this.sendClickPacket(windowId, targetSlotIndex, button, 4, this.mc.thePlayer);
                             return true;
                         }
                     }
@@ -837,7 +872,8 @@ public class StorageGUI extends GuiScreen {
             // ドロップ操作 (Mode 4)
             // button: 0 = 1個捨てる, 1 = 1スタック捨てる (Ctrl押下時)
             int button = GuiScreen.isCtrlKeyDown() ? 1 : 0;
-            this.mc.playerController.windowClick(windowId, slotIndex, button, 4, this.mc.thePlayer);
+//            this.mc.playerController.windowClick(windowId, slotIndex, button, 4, this.mc.thePlayer);
+            this.sendClickPacket(windowId, slotIndex, button, 4, this.mc.thePlayer);
         }
     }
     // --- StorageGUI.java: handleKeyInput 全体 KeyTypedと統合済み---
@@ -939,13 +975,9 @@ public class StorageGUI extends GuiScreen {
 
         // 3. クリック送信
         int windowId = parent.inventorySlots.windowId;
-        this.mc.playerController.windowClick(
-                windowId,
-                slotId,
-                clickedButton,
-                mode,
-                this.mc.thePlayer
-        );
+//        this.mc.playerController.windowClick(windowId,slotId,clickedButton,mode,this.mc.thePlayer);
+        this.sendClickPacket(windowId,slotId,clickedButton,mode,this.mc.thePlayer);
+
     }
     private void syncClick(String name, GuiChest parent) {
         IInventory inv = ((ContainerChest)parent.inventorySlots).getLowerChestInventory();
@@ -1178,7 +1210,9 @@ public class StorageGUI extends GuiScreen {
         this.lastClickTime = currentTime;
         this.lastClickButton = mouseButton;
 
-        this.mc.playerController.windowClick(windowId, slotIndex, mouseButton, mode, this.mc.thePlayer);
+//        this.mc.playerController.windowClick(windowId, slotIndex, mouseButton, mode, this.mc.thePlayer);
+        this.sendClickPacket(windowId, slotIndex, mouseButton, mode, this.mc.thePlayer);
+
     }
 
     public void handleRightClickDrag(int mouseX, int mouseY) {
@@ -1249,8 +1283,8 @@ public class StorageGUI extends GuiScreen {
                         // 空きスロットチェック
                         if (entry.getValue()[slotIndex] == null) {
                             // 1. サーバーへ送信
-                            this.mc.playerController.windowClick(parent.inventorySlots.windowId, slotIndex, 1, 0, this.mc.thePlayer);
-
+//                            this.mc.playerController.windowClick(parent.inventorySlots.windowId, slotIndex, 1, 0, this.mc.thePlayer);
+                            this.sendClickPacket(parent.inventorySlots.windowId, slotIndex, 1, 0, this.mc.thePlayer);
                             // 2. クライアントキャッシュの即時更新（重複配置対策）
                             ItemStack dummyStack = heldStack.copy();
                             dummyStack.stackSize = 1;
@@ -1310,8 +1344,8 @@ public class StorageGUI extends GuiScreen {
                     if (targetSlotIndex == this.lastDragSlotId) return;
 
                     if (!container.getSlot(targetSlotIndex).getHasStack()) {
-                        this.mc.playerController.windowClick(container.windowId, targetSlotIndex, 1, 0, this.mc.thePlayer);
-
+                        //this.mc.playerController.windowClick(container.windowId, targetSlotIndex, 1, 0, this.mc.thePlayer);
+                        this.sendClickPacket(container.windowId, targetSlotIndex, 1, 0, this.mc.thePlayer);
                         // ★重要★ 手持ちアイテムの即時減算（ゴースト対策）
                         heldStack.stackSize--;
                         if (heldStack.stackSize <= 0) {
