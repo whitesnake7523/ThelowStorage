@@ -615,8 +615,9 @@ public class StorageGUI extends GuiScreen {
 
                 // 履歴更新
                 this.lastClickSlotId = slotIdx;
-                this.lastClickTime = currentTime;
                 this.lastClickButton = mouseButton;
+                if (mode == 6) {this.lastClickTime = 0;}
+                else {this.lastClickTime = currentTime;}
 
 //                this.mc.playerController.windowClick(parent.inventorySlots.windowId, slotIdx, mouseButton, mode, this.mc.thePlayer);
                 this.sendClickPacket(parent.inventorySlots.windowId, slotIdx, mouseButton, mode, this.mc.thePlayer);
@@ -1207,8 +1208,12 @@ public class StorageGUI extends GuiScreen {
 
         // 履歴更新
         this.lastClickSlotId = slotIndex;
-        this.lastClickTime = currentTime;
         this.lastClickButton = mouseButton;
+        if (mode == 6) {
+            this.lastClickTime = 0;
+        } else {
+            this.lastClickTime = currentTime;
+        }
 
 //        this.mc.playerController.windowClick(windowId, slotIndex, mouseButton, mode, this.mc.thePlayer);
         this.sendClickPacket(windowId, slotIndex, mouseButton, mode, this.mc.thePlayer);
