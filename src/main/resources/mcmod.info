@@ -1,0 +1,16 @@
+[
+{
+  "modid": "ThelowStorage",
+  "name": "ThelowStorage",
+  "description": "Thelowのストレージを専用GUIに変更します",
+  "version": "${version}",
+  "mcversion": "${mcversion}",
+  "url": "coming soon..",
+  "updateUrl": "never comes",
+  "authorList": ["white_snake_7523"],
+  "credits": "creativity become active on deadly busy days",
+  "logoFile": "",
+  "screenshots": [],
+  "dependencies": []
+}
+]
