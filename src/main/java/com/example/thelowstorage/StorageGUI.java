@@ -8,14 +8,17 @@ import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.gui.GuiTextField;
 import net.minecraft.client.gui.ScaledResolution;
 import net.minecraft.client.gui.inventory.GuiChest;
+import net.minecraft.client.gui.inventory.GuiContainer;
 import net.minecraft.client.renderer.GlStateManager;
 import net.minecraft.client.renderer.RenderHelper;
 import net.minecraft.inventory.ContainerChest;
 import net.minecraft.inventory.IInventory;
 import net.minecraft.inventory.Slot;
 import net.minecraft.item.ItemStack;
+import net.minecraft.util.ChatComponentText;
 import org.lwjgl.input.Keyboard;
 import org.lwjgl.input.Mouse;
+import net.minecraft.client.Minecraft;
 import net.minecraft.network.play.client.C0EPacketClickWindow;
 import org.lwjgl.opengl.GL11;
 public class StorageGUI extends GuiScreen {
@@ -35,8 +38,12 @@ public class StorageGUI extends GuiScreen {
     private static final int INV_WIDTH = 176;
     private static final int INV_HEIGHT = 90;
 
+
+    private int lastClickSlotId = -1;
+    private int lastClickButton = -1;
     private int hoveredSlotId = -1;
     private String hoveredStorageName = null;
+    private int lastDragSlotId = -1; // ドラッグ操作で最後にアイテムを置いたスロットID
 
     @Override
     public void initGui() {
@@ -542,12 +549,43 @@ public class StorageGUI extends GuiScreen {
 
     private void processItemClick(Entry<String, ItemStack[]> entry, int smx, int smy, int xPos, int yPos, int rows, int mouseButton, GuiChest parent) {
         String entryName = entry.getKey().replaceAll("§[0-9a-fk-or]", "").replaceAll("[\\\\/:*?\"<>|]", "_");
+
         if (entryName.equals(StorageHandler.getActiveStorageName()) && parent != null) {
             int slotX = (smx - xPos) / 18;
             int slotY = (smy - yPos) / 18;
             int slotIdx = slotX + (slotY * 9);
+
             if (slotIdx >= 0 && slotIdx < rows * 9) {
-                int mode = isShiftKeyDown() ? 1 : 0;
+
+                long currentTime = Minecraft.getSystemTime();
+                int mode = 0;
+
+                ItemStack heldStack = this.mc.thePlayer.inventory.getItemStack();
+
+                // 1. Shiftキー (クイック移動)
+                if (isShiftKeyDown()) {
+                    mode = 1;
+                }
+                // 2. 左ダブルクリック (スタック回収)
+                else if (mouseButton == 0
+                        && heldStack != null
+                        && this.lastClickSlotId == slotIdx
+                        && this.lastClickButton == mouseButton
+                        && currentTime - this.lastClickTime < 150L) {
+                    mode = 6;
+                }
+                // 3. 右クリック
+                else if (mouseButton == 1) {
+                    // ★修正: 右クリックの配置処理は handleRightClickDrag (ドラッグ監視) に全て任せるため、
+                    // ここでのクリック処理は行わずに終了します。これで重複配置を防ぎます。
+                    return;
+                }
+
+                // 履歴更新
+                this.lastClickSlotId = slotIdx;
+                this.lastClickTime = currentTime;
+                this.lastClickButton = mouseButton;
+
                 this.mc.playerController.windowClick(parent.inventorySlots.windowId, slotIdx, mouseButton, mode, this.mc.thePlayer);
                 ThelowStorageMod.storageHandler.triggerCacheUpdate();
             }
@@ -675,43 +713,41 @@ public class StorageGUI extends GuiScreen {
             return consumed;
         }
 
-        // 2. Minecraftの設定から「現在押されたキー」がホットバーの何番に対応するかを特定
+        // 2. ホットバーキーの特定
         int hotbarSlot = -1;
         for (int i = 0; i < 9; ++i) {
-            // 各スロット(1～9)に割り当てられたキーコードと、入力されたkeyCodeを照合
             if (keyCode == this.mc.gameSettings.keyBindsHotbar[i].getKeyCode()) {
                 hotbarSlot = i;
                 break;
             }
         }
 
-        boolean isNumKey = (hotbarSlot != -1); // 何らかのホットバーキーが押された
+        boolean isNumKey = (hotbarSlot != -1);
         boolean isDropKey = (keyCode == this.mc.gameSettings.keyBindDrop.getKeyCode());
 
-        // 登録されたホットバーキーでもドロップキーでもない場合はバニラに流す
+        // 関係ないキーはバニラへ
         if (!isNumKey && !isDropKey) return false;
 
-        // --- マウス座標の正確な取得 ---
+        // --- マウス座標 ---
         int mouseX = Mouse.getX() * this.width / this.mc.displayWidth;
         int mouseY = this.height - Mouse.getY() * this.height / this.mc.displayHeight - 1;
 
         if (parent.inventorySlots == null) return false;
         int windowId = parent.inventorySlots.windowId;
-
-        // 境界線の取得 (画面上部70%付近)
         int guiLimit = getGuiHeightLimit();
 
-        // --- 判定の切り分け ---
+        // --- A. Mod GUI (倉庫側) の判定 ---
         if (mouseY <= guiLimit) {
-            // 【A】マウスが上部にある場合：Mod GUI (ストレージ) の判定
             float totalScale = getTotalScale();
             float fillScale = getFillWidthScale();
             float vHeightAbs = (float)this.height / getAbsoluteScaleFactor();
             int searchH = (int)(vHeightAbs * 0.04f);
             float itemsStartY = (vHeightAbs * 0.01f) + (float)searchH + (vHeightAbs * 0.05f);
             float currentY = (itemsStartY / fillScale) - this.scrollY;
+
             float sw = (float)this.width / totalScale;
             float startX = (sw - (float)(currentColumns * BASE_ENTRY_WIDTH)) / 2.0f;
+
             float smx = (float)mouseX / totalScale;
             float smy = (float)mouseY / totalScale;
 
@@ -721,62 +757,68 @@ public class StorageGUI extends GuiScreen {
             for (int i = 0; i < entries.size(); ++i) {
                 Entry<String, ItemStack[]> entry = entries.get(i);
                 int rows = (entry.getValue().length <= 27) ? 3 : 6;
-                String entryCleanName = entry.getKey().replaceAll("§[0-9a-fk-or]", "").replaceAll("[\\\\/:*?\"<>|]", "_");
-                boolean isActiveStorage = entryCleanName.equals(StorageHandler.getActiveStorageName());
-                int logicalRows = (isCurrentEnderChest && isActiveStorage) ? 3 : rows;
+                String cleanName = entry.getKey().replaceAll("§[0-9a-fk-or]", "").replaceAll("[\\\\/:*?\"<>|]", "_");
+                boolean isActive = cleanName.equals(StorageHandler.getActiveStorageName());
+                int logicalRows = (isCurrentEnderChest && isActive) ? 3 : rows;
 
                 float xPos = startX + (float)(i % currentColumns) * BASE_ENTRY_WIDTH;
                 float yPos = currentY + (float)(i / currentColumns) * BASE_ENTRY_HEIGHT;
 
-                // 倉庫エントリの枠内判定
+                // 枠内判定
                 if (smx >= xPos && smx <= xPos + 162 && smy >= yPos && smy <= yPos + (logicalRows * 18)) {
                     int col = (int)((smx - xPos) / 18);
                     int row = (int)((smy - yPos) / 18);
                     int slotIndex = col + (row * 9);
 
-                    // アイテムが存在する場合のみ処理
-                    if (slotIndex >= 0 && slotIndex < entry.getValue().length && entry.getValue()[slotIndex] != null) {
+                    // 配列範囲チェック
+                    if (slotIndex >= 0 && slotIndex < entry.getValue().length) {
+                        boolean hasItem = (entry.getValue()[slotIndex] != null);
+
                         if (isNumKey) {
-                            // 特定した hotbarSlot (0-8) を使用してアイテムを入れ替え
+                            // ★修正点: 数字キー移動は「空スロット」に対しても有効であるべきなので
+                            // entry.getValue() != null チェックは行わない
                             this.handleStorageInteraction(entry.getKey(), slotIndex, hotbarSlot, 2, parent);
+                            ThelowStorageMod.storageHandler.triggerCacheUpdate();
                             return true;
-                        } else if (isDropKey) {
+                        } else if (isDropKey && hasItem) {
+                            // ドロップはアイテムがある場合のみ
                             int button = GuiScreen.isCtrlKeyDown() ? 1 : 0;
                             this.handleStorageInteraction(entry.getKey(), slotIndex, button, 4, parent);
+                            ThelowStorageMod.storageHandler.triggerCacheUpdate();
                             return true;
                         }
                     }
                 }
             }
-        } else {
-            // 【B】マウスが下部にある場合：プレイヤーインベントリの判定
+        }
+        // --- B. プレイヤーインベントリ側の判定 ---
+        else {
             if (parent.inventorySlots instanceof ContainerChest) {
                 ContainerChest container = (ContainerChest) parent.inventorySlots;
                 int chestSize = container.getLowerChestInventory().getSizeInventory();
                 float invScale = getInventoryScale();
                 float screenW = this.width / invScale;
                 float screenH = this.height / invScale;
-                int invStartX = (int)((screenW - (9 * 18)) / 2);
-                int invStartY = (int)(screenH - (4 * 18 + 4) - 10);
-                int hotbarY = invStartY + 3 * 18 + 4;
+                int startX = (int)((screenW - (9 * 18)) / 2);
+                int startY = (int)(screenH - (4 * 18 + 4) - 10);
+                int hotbarY = startY + 3 * 18 + 4;
                 int vmx = (int)(mouseX / invScale);
                 int vmy = (int)(mouseY / invScale);
 
                 for (int i = 0; i < 36; i++) {
-                    int rectX = invStartX + (i % 9) * 18;
-                    int rectY = (i < 27) ? (invStartY + (i / 9) * 18) : hotbarY;
+                    int x = startX + (i % 9) * 18;
+                    int y = (i < 27) ? (startY + (i / 9) * 18) : hotbarY;
 
-                    // スロットの矩形範囲内判定
-                    if (vmx >= rectX && vmx < rectX + 18 && vmy >= rectY && vmy < rectY + 18) {
+                    if (vmx >= x && vmx < x + 18 && vmy >= y && vmy < y + 18) {
                         int targetSlotIndex = chestSize + i;
 
                         if (isNumKey) {
-                            // 特定した hotbarSlot をボタン番号として windowClick (mode 2)
                             this.mc.playerController.windowClick(windowId, targetSlotIndex, hotbarSlot, 2, this.mc.thePlayer);
                             return true;
                         } else if (isDropKey) {
-                            // ドロップキー処理を実行
-                            processPlayerInvKey(windowId, targetSlotIndex, keyCode, isNumKey, isDropKey);
+                            // ★インライン化: 外部メソッドへの依存を削除して安全性を確保
+                            int button = GuiScreen.isCtrlKeyDown() ? 1 : 0;
+                            this.mc.playerController.windowClick(windowId, targetSlotIndex, button, 4, this.mc.thePlayer);
                             return true;
                         }
                     }
@@ -1083,13 +1125,12 @@ public class StorageGUI extends GuiScreen {
                 int x = startX + col * 18;
                 int y = startY + row * 18;
                 if (vmx >= x && vmx < x + 18 && vmy >= y && vmy < y + 18) {
-                    // 以前のコードにあった「+9」を削除。
-                    // ContainerChestではチェストスロットの直後にメインインベントリ(左上)が続きます。
                     int slotIndex = chestSize + col + (row * 9);
 
-                    int mode = (Keyboard.isKeyDown(Keyboard.KEY_LSHIFT) || Keyboard.isKeyDown(Keyboard.KEY_RSHIFT)) ? 1 : 0;
-                    this.mc.playerController.windowClick(windowId, slotIndex, mouseButton, mode, this.mc.thePlayer);
-                    return;
+                    // --- ここにダブルクリック判定を追加 ---
+                    this.performClick(windowId, slotIndex, mouseButton);
+
+                    return; // 元のコード通り、処理後は即座に抜ける
                 }
             }
         }
@@ -1100,9 +1141,186 @@ public class StorageGUI extends GuiScreen {
             if (vmx >= x && vmx < x + 18 && vmy >= hotbarY && vmy < hotbarY + 18) {
                 int slotIndex = chestSize + 27 + col;
 
-                int mode = (Keyboard.isKeyDown(Keyboard.KEY_LSHIFT) || Keyboard.isKeyDown(Keyboard.KEY_RSHIFT)) ? 1 : 0;
-                this.mc.playerController.windowClick(windowId, slotIndex, mouseButton, mode, this.mc.thePlayer);
-                return;
+                // --- ここにダブルクリック判定を追加 ---
+                this.performClick(windowId, slotIndex, mouseButton);
+
+                return; // 元のコード通り、処理後は即座に抜ける
+            }
+        }
+    }
+
+    private void performClick(int windowId, int slotIndex, int mouseButton) {
+        long currentTime = net.minecraft.client.Minecraft.getSystemTime();
+        int mode = 0;
+
+        ItemStack heldStack = this.mc.thePlayer.inventory.getItemStack();
+
+        // 1. Shiftキー
+        if (isShiftKeyDown()) {
+            mode = 1;
+        }
+        // 2. 左ダブルクリック
+        else if (mouseButton == 0
+                && heldStack != null
+                && this.lastClickSlotId == slotIndex
+                && this.lastClickButton == mouseButton
+                && currentTime - this.lastClickTime < 250L) {
+            mode = 6;
+        }
+        // 3. 右クリック
+        else if (mouseButton == 1) {
+            // ★修正: handleRightClickDrag に任せるため無視
+            return;
+        }
+
+        // 履歴更新
+        this.lastClickSlotId = slotIndex;
+        this.lastClickTime = currentTime;
+        this.lastClickButton = mouseButton;
+
+        this.mc.playerController.windowClick(windowId, slotIndex, mouseButton, mode, this.mc.thePlayer);
+    }
+
+    public void handleRightClickDrag(int mouseX, int mouseY) {
+        // 1. Mod GUIが無効なら即終了
+        if (!ConfigHandler.isOverlayEnabled) {
+            this.lastDragSlotId = -1;
+            return;
+        }
+
+        // 2. 右クリックチェック
+        if (!org.lwjgl.input.Mouse.isButtonDown(1)) {
+            if (this.lastDragSlotId != -1) {
+                this.lastDragSlotId = -1;
+            }
+            return;
+        }
+
+        // 3. アイテム所持チェック
+        ItemStack heldStack = this.mc.thePlayer.inventory.getItemStack();
+        if (heldStack == null || heldStack.stackSize <= 0) {
+            return;
+        }
+
+        if (!(this.mc.currentScreen instanceof GuiChest)) return;
+        GuiChest parent = (GuiChest) this.mc.currentScreen;
+
+        net.minecraft.client.gui.ScaledResolution sr = new net.minecraft.client.gui.ScaledResolution(this.mc);
+        int screenWidth = sr.getScaledWidth();
+        int screenHeight = sr.getScaledHeight();
+        int guiLimit = getGuiHeightLimit();
+
+        // === A. Mod GUI (倉庫側) ===
+        if (mouseY <= guiLimit) {
+            float totalScale = getTotalScale();
+            float fillScale = getFillWidthScale();
+            float vHeightAbs = (float)screenHeight / getAbsoluteScaleFactor();
+            int searchH = (int)(vHeightAbs * 0.04f);
+            float itemsStartY = (vHeightAbs * 0.01f) + (float)searchH + (vHeightAbs * 0.05f);
+            float currentY = (itemsStartY / fillScale) - this.scrollY;
+
+            float sw = (float)screenWidth / totalScale;
+            float startX = (sw - (float)(currentColumns * BASE_ENTRY_WIDTH)) / 2.0f;
+
+            float smx = (float)mouseX / totalScale;
+            float smy = (float)mouseY / totalScale;
+
+            List<Entry<String, ItemStack[]>> entries = StorageCache.getSortedEntries();
+            boolean isCurrentEnderChest = isEnderChest(parent);
+
+            for (int i = 0; i < entries.size(); ++i) {
+                Entry<String, ItemStack[]> entry = entries.get(i);
+                String cleanName = entry.getKey().replaceAll("§[0-9a-fk-or]", "").replaceAll("[\\\\/:*?\"<>|]", "_");
+                if (!cleanName.equals(StorageHandler.getActiveStorageName())) continue;
+
+                int rows = (entry.getValue().length <= 27) ? 3 : 6;
+                int logicalRows = (isCurrentEnderChest) ? 3 : rows;
+                float xPos = startX + (float)(i % currentColumns) * BASE_ENTRY_WIDTH;
+                float yPos = currentY + (float)(i / currentColumns) * BASE_ENTRY_HEIGHT;
+
+                if (smx >= xPos && smx <= xPos + 162 && smy >= yPos && smy <= yPos + (logicalRows * 18)) {
+                    int col = (int)((smx - xPos) / 18);
+                    int row = (int)((smy - yPos) / 18);
+                    int slotIndex = col + (row * 9);
+
+                    if (slotIndex >= 0 && slotIndex < entry.getValue().length) {
+                        if (slotIndex == this.lastDragSlotId) return;
+
+                        // 空きスロットチェック
+                        if (entry.getValue()[slotIndex] == null) {
+                            // 1. サーバーへ送信
+                            this.mc.playerController.windowClick(parent.inventorySlots.windowId, slotIndex, 1, 0, this.mc.thePlayer);
+
+                            // 2. クライアントキャッシュの即時更新（重複配置対策）
+                            ItemStack dummyStack = heldStack.copy();
+                            dummyStack.stackSize = 1;
+                            entry.getValue()[slotIndex] = dummyStack;
+                            ThelowStorageMod.storageHandler.triggerCacheUpdate();
+
+                            // 3. ★重要★ 手持ちアイテムの即時減算（ゴースト対策）
+                            // サーバーからの同期を待たず、ここで強制的に1個減らす
+                            heldStack.stackSize--;
+                            if (heldStack.stackSize <= 0) {
+                                this.mc.thePlayer.inventory.setItemStack(null);
+                            }
+
+                            this.lastDragSlotId = slotIndex;
+                        }
+                    }
+                    return;
+                }
+            }
+        }
+        // === B. プレイヤーインベントリ側 ===
+        else {
+            if (parent.inventorySlots instanceof ContainerChest) {
+                ContainerChest container = (ContainerChest) parent.inventorySlots;
+                int chestSize = container.getLowerChestInventory().getSizeInventory();
+                float invScale = getInventoryScale();
+                float screenW = screenWidth / invScale;
+                float screenH = screenHeight / invScale;
+                int startX = (int)((screenW - (9 * 18)) / 2);
+                int startY = (int)(screenH - (4 * 18 + 4) - 10);
+                int hotbarY = startY + 3 * 18 + 4;
+                int vmx = (int)(mouseX / invScale);
+                int vmy = (int)(mouseY / invScale);
+
+                int targetSlotIndex = -1;
+                for (int row = 0; row < 3; row++) {
+                    for (int col = 0; col < 9; col++) {
+                        int x = startX + col * 18;
+                        int y = startY + row * 18;
+                        if (vmx >= x && vmx < x + 18 && vmy >= y && vmy < y + 18) {
+                            targetSlotIndex = chestSize + col + (row * 9);
+                            break;
+                        }
+                    }
+                }
+                if (targetSlotIndex == -1) {
+                    for (int col = 0; col < 9; col++) {
+                        int x = startX + col * 18;
+                        if (vmx >= x && vmx < x + 18 && vmy >= hotbarY && vmy < hotbarY + 18) {
+                            targetSlotIndex = chestSize + 27 + col;
+                            break;
+                        }
+                    }
+                }
+
+                if (targetSlotIndex != -1) {
+                    if (targetSlotIndex == this.lastDragSlotId) return;
+
+                    if (!container.getSlot(targetSlotIndex).getHasStack()) {
+                        this.mc.playerController.windowClick(container.windowId, targetSlotIndex, 1, 0, this.mc.thePlayer);
+
+                        // ★重要★ 手持ちアイテムの即時減算（ゴースト対策）
+                        heldStack.stackSize--;
+                        if (heldStack.stackSize <= 0) {
+                            this.mc.thePlayer.inventory.setItemStack(null);
+                        }
+
+                        this.lastDragSlotId = targetSlotIndex;
+                    }
+                }
             }
         }
     }

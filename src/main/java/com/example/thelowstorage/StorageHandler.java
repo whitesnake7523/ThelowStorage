@@ -54,9 +54,11 @@ public class StorageHandler {
     }
     @SubscribeEvent
     public void onDrawScreenPost(GuiScreenEvent.DrawScreenEvent.Post event) {
-        if (event.gui instanceof GuiChest && !(event.gui instanceof StorageGUI)) {
+        if (event.gui instanceof GuiChest && !(event.gui instanceof StorageGUI)&& ConfigHandler.isOverlayEnabled) {
             GuiChest guiChest = (GuiChest) event.gui;
             IInventory inv = ((ContainerChest) guiChest.inventorySlots).getLowerChestInventory();
+
+            overlay.handleRightClickDrag(event.mouseX, event.mouseY);
 
             if (isTargetContainer(inv) && StorageGUI.isOverlayEnabled) {
                 // --- 追加: シザーテストを解除 ---
@@ -68,6 +70,7 @@ public class StorageHandler {
             }
         }
     }
+
 
 // --- 既存の変数定義から「スロット隠蔽用」のマップや変数を削除 ---
     // private final Map<Slot, int[]> originalSlotPositions ... (削除)
@@ -294,6 +297,7 @@ public class StorageHandler {
             if ((inv.getDisplayName().getUnformattedText().equals("Chest")||(inv.getDisplayName().getUnformattedText().equals("エンダーチェスト")) && activeStorageName != null)) {
                 NBTUtils.saveInventoryToNBT(inv, activeStorageName);
                 activeStorageName = null;
+                lastClickedItemName=null;
             }
         }
     }
