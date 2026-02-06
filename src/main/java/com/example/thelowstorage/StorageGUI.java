@@ -603,7 +603,7 @@ public class StorageGUI extends GuiScreen {
                         && heldStack != null
                         && this.lastClickSlotId == slotIdx
                         && this.lastClickButton == mouseButton
-                        && currentTime - this.lastClickTime < 150L) {
+                        && currentTime - this.lastClickTime < 250L) {
                     mode = 6;
                 }
                 // 3. 右クリック

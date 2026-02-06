@@ -42,7 +42,7 @@ public class StorageHandler {
         if (title.contains("倉庫 -") && title.contains("ページ目")) return true;
 
         // 2. 実体（名前がバニラ、または「倉庫」と付くもの）
-        boolean isGenericChest = title.equals("Chest") || title.equals("エンダーチェスト");
+        boolean isGenericChest = title.equals("Chest") || title.contains("チェスト");
 
         if (isGenericChest) {
             // 【重要】ModがONであっても、現在どのストレージを開こうとしているか(lastClicked)
@@ -280,7 +280,7 @@ public class StorageHandler {
         if (event.gui instanceof GuiChest) {
             GuiChest guiChest = (GuiChest) event.gui;
             IInventory inv = ((ContainerChest) guiChest.inventorySlots).getLowerChestInventory();
-            if ((inv.getDisplayName().getUnformattedText().equals("Chest")||(inv.getDisplayName().getUnformattedText().equals("エンダーチェスト")) && activeStorageName != null)) {
+            if ((inv.getDisplayName().getUnformattedText().equals("Chest")||(inv.getDisplayName().getUnformattedText().contains("チェスト")) && activeStorageName != null)) {
                 if (Mouse.getEventButton() != -1 && Mouse.getEventButtonState()) {
                     NBTUtils.saveInventoryToNBT(inv, activeStorageName);
                 }
@@ -294,7 +294,7 @@ public class StorageHandler {
         if (mc.currentScreen instanceof GuiChest && event.gui == null) {
             GuiChest guiChest = (GuiChest) mc.currentScreen;
             IInventory inv = ((ContainerChest) guiChest.inventorySlots).getLowerChestInventory();
-            if ((inv.getDisplayName().getUnformattedText().equals("Chest")||(inv.getDisplayName().getUnformattedText().equals("エンダーチェスト")) && activeStorageName != null)) {
+            if ((inv.getDisplayName().getUnformattedText().equals("Chest")||(inv.getDisplayName().getUnformattedText().contains("チェスト")) && activeStorageName != null)) {
                 NBTUtils.saveInventoryToNBT(inv, activeStorageName);
                 activeStorageName = null;
                 lastClickedItemName=null;

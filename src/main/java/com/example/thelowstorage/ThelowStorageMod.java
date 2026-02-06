@@ -8,7 +8,7 @@ import net.minecraftforge.fml.common.FMLCommonHandler;
 import java.io.File;
 
 // guiFactoryのパスをプロジェクトのパッケージ名に合わせて指定
-@Mod(modid = "ThelowStorage", version = "0.3", guiFactory = "com.example.thelowstorage.ModGuiFactory")
+@Mod(modid = "ThelowStorage", version = "1.0", guiFactory = "com.example.thelowstorage.ModGuiFactory")
 public class ThelowStorageMod {
     public static File configDir;
     public static StorageHandler storageHandler;
