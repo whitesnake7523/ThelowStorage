@@ -1222,7 +1222,7 @@ public class StorageGUI extends GuiScreen {
 
     public void handleRightClickDrag(int mouseX, int mouseY) {
         // 1. Mod GUIが無効なら即終了
-        if (!ConfigHandler.isOverlayEnabled) {
+        if (!ThelowStorageMod.storageHandler.isContextValid(this.mc.currentScreen)) {
             this.lastDragSlotId = -1;
             return;
         }
@@ -1236,6 +1236,7 @@ public class StorageGUI extends GuiScreen {
         }
 
         // 3. アイテム所持チェック
+        if (this.mc.thePlayer == null || this.mc.thePlayer.inventory == null) return;
         ItemStack heldStack = this.mc.thePlayer.inventory.getItemStack();
         if (heldStack == null || heldStack.stackSize <= 0) {
             return;

@@ -1,6 +1,7 @@
 package com.example.thelowstorage;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.gui.ScaledResolution;
 import net.minecraft.client.gui.inventory.GuiChest;
 import net.minecraft.inventory.ContainerChest;
@@ -51,6 +52,23 @@ public class StorageHandler {
             return activeStorageName != null || lastClickedItemName != null;
         }
         return false;
+    }
+
+    public boolean isContextValid(GuiScreen currentScreen) {
+        // 1. そもそもModの設定がOFFなら無効
+        if (!ConfigHandler.isOverlayEnabled) return false;
+
+        // 2. 画面がGuiChest（またはその継承クラス）でないなら無効
+        if (!(currentScreen instanceof GuiChest)) return false;
+
+        GuiChest guiChest = (GuiChest) currentScreen;
+        IInventory inv = ((ContainerChest) guiChest.inventorySlots).getLowerChestInventory();
+
+        // 3. 開いているコンテナがModの対象（倉庫ページまたは特定のチェスト）でないなら無効
+        // ここで以前の NPE 対策を含めた isTargetContainer を利用します
+        if (!isTargetContainer(inv)) return false;
+
+        return true;
     }
     @SubscribeEvent
     public void onDrawScreenPost(GuiScreenEvent.DrawScreenEvent.Post event) {
