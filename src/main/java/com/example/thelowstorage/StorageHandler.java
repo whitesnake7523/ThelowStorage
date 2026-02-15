@@ -36,6 +36,7 @@ public class StorageHandler {
     public static void resetActiveStorage() {
         activeStorageName = null;
     }
+
     private boolean isTargetContainer(IInventory inv) {
         String title = inv.getDisplayName().getUnformattedText();
 
@@ -46,13 +47,11 @@ public class StorageHandler {
         boolean isGenericChest = title.equals("Chest") || title.contains("チェスト");
 
         if (isGenericChest) {
-            // 【重要】ModがONであっても、現在どのストレージを開こうとしているか(lastClicked)
-            // または既に開いているか(activeStorage)の情報がある時だけ Mod GUI を表示する。
-            // これにより、ただのチェストを開いた時にMod GUIが出るのを防ぎます。
             return activeStorageName != null || lastClickedItemName != null;
         }
         return false;
     }
+    
 
     public boolean isContextValid(GuiScreen currentScreen) {
         // 1. そもそもModの設定がOFFなら無効
@@ -70,6 +69,7 @@ public class StorageHandler {
 
         return true;
     }
+
     @SubscribeEvent
     public void onDrawScreenPost(GuiScreenEvent.DrawScreenEvent.Post event) {
         if (event.gui instanceof GuiChest && !(event.gui instanceof StorageGUI)&& ConfigHandler.isOverlayEnabled) {
@@ -169,8 +169,6 @@ public class StorageHandler {
      */
 // StorageHandler.java
 
-// StorageHandler.java
-
     @SubscribeEvent(priority = EventPriority.HIGHEST)
     public void onKeyboardInput(GuiScreenEvent.KeyboardInputEvent.Pre event) {
         if (event.gui instanceof GuiChest) {
@@ -236,7 +234,6 @@ public class StorageHandler {
             }
             // B. 「Chest」や「エンダーチェスト」などの実体を開いている場合
             else {
-                // 前の画面でクリックした名前があるなら、それを現在の有効なストレージ名として確定
                 if (activeStorageName == null && lastClickedItemName != null) {
                     activeStorageName = lastClickedItemName;
                     //Minecraft.getMinecraft().thePlayer.addChatMessage(new ChatComponentText("ActiveStorageNameが更新されました:"+activeStorageName));
@@ -312,10 +309,14 @@ public class StorageHandler {
         if (mc.currentScreen instanceof GuiChest && event.gui == null) {
             GuiChest guiChest = (GuiChest) mc.currentScreen;
             IInventory inv = ((ContainerChest) guiChest.inventorySlots).getLowerChestInventory();
-            if ((inv.getDisplayName().getUnformattedText().equals("Chest")||(inv.getDisplayName().getUnformattedText().contains("チェスト")) && activeStorageName != null)) {
-                NBTUtils.saveInventoryToNBT(inv, activeStorageName);
+            if (activeStorageName != null || lastClickedItemName != null) {
+                if((inv.getDisplayName().getUnformattedText().equals("Chest")||(inv.getDisplayName().getUnformattedText().contains("チェスト")))) {
+                    NBTUtils.saveInventoryToNBT(inv, activeStorageName);
+                }
+                else if (!inv.getDisplayName().getUnformattedText().contains("倉庫")){
                 activeStorageName = null;
-                lastClickedItemName=null;
+                lastClickedItemName = null;
+                }
             }
         }
     }

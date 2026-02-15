@@ -1222,28 +1222,27 @@ public class StorageGUI extends GuiScreen {
 
     public void handleRightClickDrag(int mouseX, int mouseY) {
         // 1. Mod GUIが無効なら即終了
+        if (this.mc == null || this.mc.thePlayer == null || this.mc.currentScreen == null) return;
+
         if (!ThelowStorageMod.storageHandler.isContextValid(this.mc.currentScreen)) {
             this.lastDragSlotId = -1;
             return;
         }
 
-        // 2. 右クリックチェック
+        // 2. 右クリックとアイテム保持のチェック
         if (!org.lwjgl.input.Mouse.isButtonDown(1)) {
-            if (this.lastDragSlotId != -1) {
-                this.lastDragSlotId = -1;
-            }
+            this.lastDragSlotId = -1;
             return;
         }
 
-        // 3. アイテム所持チェック
-        if (this.mc.thePlayer == null || this.mc.thePlayer.inventory == null) return;
         ItemStack heldStack = this.mc.thePlayer.inventory.getItemStack();
-        if (heldStack == null || heldStack.stackSize <= 0) {
-            return;
-        }
+        if (heldStack == null || heldStack.stackSize <= 0) return;
 
         if (!(this.mc.currentScreen instanceof GuiChest)) return;
         GuiChest parent = (GuiChest) this.mc.currentScreen;
+
+        // 重要なガード: inventorySlotsがnullでないか
+        if (parent.inventorySlots == null) return;
 
         net.minecraft.client.gui.ScaledResolution sr = new net.minecraft.client.gui.ScaledResolution(this.mc);
         int screenWidth = sr.getScaledWidth();
@@ -1270,8 +1269,9 @@ public class StorageGUI extends GuiScreen {
 
             for (int i = 0; i < entries.size(); ++i) {
                 Entry<String, ItemStack[]> entry = entries.get(i);
+                String activeName = StorageHandler.getActiveStorageName();
                 String cleanName = entry.getKey().replaceAll("§[0-9a-fk-or]", "").replaceAll("[\\\\/:*?\"<>|]", "_");
-                if (!cleanName.equals(StorageHandler.getActiveStorageName())) continue;
+                if (activeName == null || !cleanName.equals(StorageHandler.getActiveStorageName())) continue;
 
                 int rows = (entry.getValue().length <= 27) ? 3 : 6;
                 int logicalRows = (isCurrentEnderChest) ? 3 : rows;
